@@ -1,9 +1,11 @@
 ---
 firewall_allowed_tcp_ports:
   - "22"
-  - "25"
   - "80"
   - "443"
+  - "587"
+  - "993"
+firewall_allowed_ip: []
 firewall_allowed_udp_ports: []
 firewall_forwarded_tcp_ports: []
 firewall_forwarded_udp_ports: []
