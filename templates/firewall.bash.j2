@@ -52,6 +52,12 @@ iptables -t nat -I PREROUTING -p udp --dport {{ forwarded_port.src }} -j REDIREC
 iptables -t nat -I OUTPUT -p udp -o lo --dport {{ forwarded_port.src }} -j REDIRECT --to-port {{ forwarded_port.dest }}
 {% endfor %}
 
+# Flood control
+{# Add a rule for each flood control port #}
+{% for port in firewall_flood_tcp_ports %}
+iptables -A INPUT -p tcp -m tcp --dport {{ port }} -m state --state NEW -m recent --update --seconds 10 --hitcount 20 --name DEFAULT --rsource -j DROP
+{% endfor %}
+
 # Open ports
 {# Add a rule for each open port #}
 {% for port in firewall_allowed_tcp_ports %}
@@ -59,12 +65,6 @@ iptables -A INPUT -p tcp -m tcp --dport {{ port }} -j ACCEPT
 {% endfor %}
 {% for port in firewall_allowed_udp_ports %}
 iptables -A INPUT -p udp -m udp --dport {{ port }} -j ACCEPT
-{% endfor %}
-
-# Flood control
-{# Add a rule for each flood control port #}
-{% for port in firewall_flood_tcp_ports %}
-iptables -A INPUT -p tcp -m tcp --dport {{ port }} -m state --state NEW -m recent --update --seconds 10 --hitcount 20 --name DEFAULT --rsource -j DROP
 {% endfor %}
 
 # Accept icmp ping requests.
