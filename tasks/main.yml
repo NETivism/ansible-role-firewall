@@ -7,7 +7,7 @@
   command: iptables -F creates=/etc/init.d/firewall
 
 - name: Copy firewall script into place.
-  template: src=firewall.bash.j2 dest=/etc/firewall.bash owner=root group=root mode=0744
+  template: src=firewall.bash.j2 dest=/usr/local/bin/firewall.sh owner=root group=root mode=0744
   notify: restart firewall
 
 - name: Copy firewall init script into place.
