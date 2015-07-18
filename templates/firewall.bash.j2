@@ -31,7 +31,6 @@ fi
 
 # Remove all rules and chains.
 iptables -F
-iptables -X
 
 # Accept traffic from loopback interface (localhost).
 iptables -A INPUT -i lo -j ACCEPT
