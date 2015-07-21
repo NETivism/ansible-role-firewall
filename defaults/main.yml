@@ -1,8 +1,10 @@
 ---
 firewall_allowed_tcp_ports:
   - "22"
+  - "25"
   - "80"
   - "443"
+  - "465"
   - "587"
   - "993"
 firewall_flood_tcp_ports:
