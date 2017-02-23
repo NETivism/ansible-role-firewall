@@ -32,6 +32,27 @@ fi
 # Remove all rules and chains.
 iptables -F
 
+# Add docker based rule
+chain_exists() {
+  local chain_name="$1" ; shift
+  [ $# -eq 1 ] && local table="--table $1"
+  iptables $table -n --list "$chain_name" >/dev/null 2>&1
+}
+
+chain_exists DOCKER && iptables -X DOCKER
+chain_exists DOCKER nat && iptables -t nat -X DOCKER
+
+iptables -t nat -N DOCKER
+iptables -t nat -A PREROUTING -m addrtype --dst-type LOCAL -j DOCKER
+iptables -t nat -A OUTPUT ! -d 127.0.0.0/8 -m addrtype --dst-type LOCAL -j DOCKER
+iptables -t nat -A POSTROUTING -s 172.17.0.0/16 ! -o docker0 -j MASQUERADE
+
+iptables -t filter -N DOCKER
+iptables -t filter -A FORWARD -o docker0 -j DOCKER
+iptables -t filter -A FORWARD -o docker0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+iptables -t filter -A FORWARD -i docker0 ! -o docker0 -j ACCEPT
+iptables -t filter -A FORWARD -i docker0 -o docker0 -j ACCEPT
+
 # Accept traffic from loopback interface (localhost).
 iptables -A INPUT -i lo -j ACCEPT
 
