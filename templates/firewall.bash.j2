@@ -112,3 +112,5 @@ iptables -A INPUT -m limit --limit 15/minute -j LOG --log-level 7 --log-prefix "
 
 # Drop all other traffic.
 iptables -A INPUT -j DROP
+
+fail2ban-client reload
