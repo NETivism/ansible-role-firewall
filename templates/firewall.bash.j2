@@ -53,14 +53,6 @@ iptables -t filter -A FORWARD -o docker0 -m conntrack --ctstate RELATED,ESTABLIS
 iptables -t filter -A FORWARD -i docker0 ! -o docker0 -j ACCEPT
 iptables -t filter -A FORWARD -i docker0 -o docker0 -j ACCEPT
 
-# Accept traffic from loopback interface (localhost).
-iptables -A INPUT -i lo -j ACCEPT
-
-# Accept white list
-{% for addr in firewall_allowed_ip %}
-iptables -A INPUT -s {{ addr }} -j ACCEPT
-{% endfor %}
-
 # Forwarded ports.
 {# Add a rule for each forwarded port #}
 {% for forwarded_port in firewall_forwarded_tcp_ports %}
@@ -114,3 +106,13 @@ iptables -A INPUT -m limit --limit 15/minute -j LOG --log-level 7 --log-prefix "
 iptables -A INPUT -j DROP
 
 fail2ban-client reload
+
+#### below is force allowed
+# Accept white list
+{% for addr in firewall_allowed_ip %}
+iptables -I INPUT -s {{ addr }} -j ACCEPT
+{% endfor %}
+
+# Accept traffic from loopback interface (localhost).
+iptables -I INPUT -i lo -j ACCEPT
+
