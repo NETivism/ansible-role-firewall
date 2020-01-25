@@ -33,21 +33,21 @@ fi
 {# Add a rule for each forwarded port #}
 {% for forwarded_port in firewall_forwarded_tcp_ports %}
 iptables -t nat -C PREROUTING -p tcp --dport {{ forwarded_port.src }} -j REDIRECT --to-port {{ forwarded_port.dest }}
-  if [ $? -eq 0 ]; then
+  if [ $? -eq 1 ]; then
     iptables -t nat -I PREROUTING -p tcp --dport {{ forwarded_port.src }} -j REDIRECT --to-port {{ forwarded_port.dest }}
   fi
 iptables -t nat -C OUTPUT -p tcp -o lo --dport {{ forwarded_port.src }} -j REDIRECT --to-port {{ forwarded_port.dest }}
-  if [ $? -eq 0 ]; then
+  if [ $? -eq 1 ]; then
     iptables -t nat -I OUTPUT -p tcp -o lo --dport {{ forwarded_port.src }} -j REDIRECT --to-port {{ forwarded_port.dest }}
   fi
 {% endfor %}
 {% for forwarded_port in firewall_forwarded_udp_ports %}
   iptables -t nat -C PREROUTING -p udp --dport {{ forwarded_port.src }} -j REDIRECT --to-port {{ forwarded_port.dest }}
-  if [ $? -eq 0 ]; then
+  if [ $? -eq 1 ]; then
     iptables -t nat -I PREROUTING -p udp --dport {{ forwarded_port.src }} -j REDIRECT --to-port {{ forwarded_port.dest }}
   fi
   iptables -t nat -I OUTPUT -p udp -o lo --dport {{ forwarded_port.src }} -j REDIRECT --to-port {{ forwarded_port.dest }}
-  if [ $? -eq 0 ]; then
+  if [ $? -eq 1 ]; then
     iptables -t nat -C OUTPUT -p udp -o lo --dport {{ forwarded_port.src }} -j REDIRECT --to-port {{ forwarded_port.dest }}
   fi
 {% endfor %}
@@ -56,7 +56,7 @@ iptables -t nat -C OUTPUT -p tcp -o lo --dport {{ forwarded_port.src }} -j REDIR
 {# Add a rule for each flood control port #}
 {% for port in firewall_flood_tcp_ports %}
   iptables -C INPUT -p tcp -m tcp --dport {{ port }} -m state --state NEW -m recent --update --seconds 10 --hitcount 20 --name DEFAULT --rsource -j DROP
-  if [ $? -eq 0 ]; then
+  if [ $? -eq 1 ]; then
     iptables -A INPUT -p tcp -m tcp --dport {{ port }} -m state --state NEW -m recent --update --seconds 10 --hitcount 20 --name DEFAULT --rsource -j DROP
   fi
 {% endfor %}
@@ -65,36 +65,36 @@ iptables -t nat -C OUTPUT -p tcp -o lo --dport {{ forwarded_port.src }} -j REDIR
 {# Add a rule for each open port #}
 {% for port in firewall_allowed_tcp_ports %}
   iptables -C INPUT -p tcp -m tcp --dport {{ port }} -j ACCEPT
-  if [ $? -eq 0 ]; then
+  if [ $? -eq 1 ]; then
     iptables -A INPUT -p tcp -m tcp --dport {{ port }} -j ACCEPT
   fi
 {% endfor %}
 {% for port in firewall_allowed_udp_ports %}
   iptables -C INPUT -p udp -m udp --dport {{ port }} -j ACCEPT
-  if [ $? -eq 0 ]; then
+  if [ $? -eq 1 ]; then
     iptables -A INPUT -p udp -m udp --dport {{ port }} -j ACCEPT
   fi
 {% endfor %}
 
 # Accept icmp ping requests.
 iptables -C INPUT -p icmp -j ACCEPT
-if [ $? -eq 0 ]; then
+if [ $? -eq 1 ]; then
   iptables -A INPUT -p icmp -j ACCEPT
 fi
 
 # Allow NTP traffic for time synchronization.
 iptables -C OUTPUT -p udp --dport 123 -j ACCEPT
-if [ $? -eq 0 ]; then
+if [ $? -eq 1 ]; then
   iptables -A OUTPUT -p udp --dport 123 -j ACCEPT
 fi
 iptables -C INPUT -p udp --sport 123 -j ACCEPT
-if [ $? -eq 0 ]; then
+if [ $? -eq 1 ]; then
   iptables -A INPUT -p udp --sport 123 -j ACCEPT
 fi
 
 # Allow established connections:
 iptables -C INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
-if [ $? -eq 0 ]; then
+if [ $? -eq 1 ]; then
   iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
 fi
 
@@ -104,14 +104,14 @@ fi
 {% if firewall_log_dropped_packets %}
 # Log other incoming requests (all of which are dropped) at 15/minute max.
   iptables -C INPUT -m limit --limit 15/minute -j LOG --log-level 7 --log-prefix "Dropped by firewall: "
-  if [ $? -eq 0 ]; then
+  if [ $? -eq 1 ]; then
     iptables -A INPUT -m limit --limit 15/minute -j LOG --log-level 7 --log-prefix "Dropped by firewall: "
   fi
 {% endif %}
 
 # Drop all other traffic.
 iptables -C INPUT -j DROP
-if [ $? -eq 0 ]; then
+if [ $? -eq 1 ]; then
   iptables -A INPUT -j DROP
 fi
 
@@ -119,14 +119,14 @@ fi
 # Accept white list
 {% for addr in firewall_allowed_ip %}
   iptables -C INPUT -s {{ addr }} -j ACCEPT
-  if [ $? -eq 0 ]; then
+  if [ $? -eq 1 ]; then
     iptables -I INPUT -s {{ addr }} -j ACCEPT
   fi
 {% endfor %}
 
 # Accept traffic from loopback interface (localhost).
 iptables -C INPUT -i lo -j ACCEPT
-if [ $? -eq 0 ]; then
+if [ $? -eq 1 ]; then
   iptables -I INPUT -i lo -j ACCEPT
 fi
 
