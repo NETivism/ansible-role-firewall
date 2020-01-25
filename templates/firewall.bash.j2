@@ -91,10 +91,6 @@ iptables -C INPUT -p udp --sport 123 -j ACCEPT
 if [ $? -eq 0 ]; then
   iptables -A INPUT -p udp --sport 123 -j ACCEPT
 fi
-# Additional custom rules.
-#{% for rule in firewall_additional_rules %}
-#{{ rule }}
-#{% endfor %}
 
 # Allow established connections:
 iptables -C INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
