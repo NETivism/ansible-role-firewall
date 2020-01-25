@@ -21,10 +21,6 @@ case "$1" in
     echo "Starting firewall."
     /usr/local/bin/firewall.sh
     ;;
-  stop)
-    echo "Stopping firewall."
-    iptables -F
-    ;;
   restart)
     echo "Restarting firewall."
     /usr/local/bin/firewall.sh
@@ -33,7 +29,7 @@ case "$1" in
     echo -e "`iptables -L -n`"
     ;;
   *)
-    echo "Usage: /etc/init.d/firewall {start|stop|status|restart}"
+    echo "Usage: /etc/init.d/firewall {start|status|restart}"
     exit 1
     ;;
 esac
