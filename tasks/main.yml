@@ -2,10 +2,16 @@
 - name: Ensure iptables is installed (Debian).
   apt: pkg=iptables state=installed
   when: ansible_os_family == 'Debian'
+  tags:
+    - firewall-reload
 
 - name: Copy firewall script into place.
   template: src=firewall.bash.j2 dest=/usr/local/bin/firewall.sh owner=root group=root mode=0744
+  tags:
+    - firewall-reload
 
 - name: Copy firewall init script into place.
   template: src=firewall.j2 dest=/etc/init.d/firewall owner=root group=root mode=0755
+  tags:
+    - firewall-reload
 
