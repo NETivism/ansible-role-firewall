@@ -1,0 +1,61 @@
+---
+- name: Ensure nftables is installed
+  apt: pkg=nftables state=present
+
+- name: Enable reverse path filter (no spoofing)
+  sysctl:
+    name: "{{ item }}"
+    value: "1"
+    sysctl_file: /etc/sysctl.d/60-firewall.conf
+    sysctl_set: yes
+  loop:
+    - net.ipv4.conf.all.rp_filter
+    - net.ipv4.conf.default.rp_filter
+
+- name: Create nftables include directory
+  file: path={{ firewall_nft_file | dirname }} state=directory owner=root group=root mode=0755
+
+- name: Copy nftables ruleset into place
+  template:
+    src: firewall.nft.j2
+    dest: "{{ firewall_nft_file }}"
+    owner: root
+    group: root
+    mode: 0644
+    validate: nft -c -f %s
+  register: firewall_nft_template
+
+# The old sysv script would otherwise still be generated into firewall.service.
+- name: Check legacy firewall init script
+  stat: path=/etc/init.d/firewall
+  register: firewall_legacy_init
+
+- name: Disable legacy firewall init script
+  command: update-rc.d -f firewall remove
+  when: firewall_legacy_init.stat.exists
+
+- name: Remove legacy firewall scripts
+  file: path={{ item }} state=absent
+  loop:
+    - /etc/init.d/firewall
+    - /usr/local/bin/firewall.sh
+
+- name: Copy firewall systemd unit into place
+  template: src=firewall.service.j2 dest=/etc/systemd/system/firewall.service owner=root group=root mode=0644
+  register: firewall_unit_template
+
+- name: Enable and (re)load nftables firewall
+  systemd:
+    name: firewall
+    daemon_reload: yes
+    enabled: yes
+    state: "{{ 'restarted' if (firewall_nft_template.changed or firewall_unit_template.changed or firewall_legacy_init.stat.exists) else 'started' }}"
+
+- name: Render legacy iptables cleanup script
+  template: src=firewall-iptables-cleanup.sh.j2 dest=/usr/local/sbin/firewall-iptables-cleanup.sh owner=root group=root mode=0700
+
+# Runs after nftables is active, so the host is never left without a firewall.
+- name: Remove rules left by the old iptables firewall
+  command: /usr/local/sbin/firewall-iptables-cleanup.sh
+  register: firewall_iptables_cleanup
+  changed_when: "'CHANGED' in firewall_iptables_cleanup.stdout"

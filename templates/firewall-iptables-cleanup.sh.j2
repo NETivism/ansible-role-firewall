@@ -1,0 +1,50 @@
+#!/bin/bash
+# {{ ansible_managed }}
+#
+# Remove rules added by the old iptables firewall.bash so the legacy
+# "INPUT -j DROP" does not keep filtering after moving to nftables.
+# Rules are deleted one by one; other INPUT / nat rules (docker) are untouched.
+
+command -v iptables >/dev/null 2>&1 || exit 0
+
+CHANGED=0
+rm_rule() {
+  local table=$1; shift
+  while iptables -t "$table" -C "$@" 2>/dev/null; do
+    iptables -t "$table" -D "$@" || break
+    CHANGED=1
+  done
+}
+
+# Drop the catch-all first, so no ACCEPT is ever removed while it still applies.
+rm_rule filter INPUT -j DROP
+rm_rule filter INPUT -m limit --limit 15/minute -j LOG --log-level 7 --log-prefix "Dropped by firewall: "
+
+{% for p in firewall_forwarded_tcp_ports %}
+rm_rule nat PREROUTING -p tcp --dport {{ p.src }} -j REDIRECT --to-port {{ p.dest }}
+rm_rule nat OUTPUT -p tcp -o lo --dport {{ p.src }} -j REDIRECT --to-port {{ p.dest }}
+{% endfor %}
+{% for p in firewall_forwarded_udp_ports %}
+rm_rule nat PREROUTING -p udp --dport {{ p.src }} -j REDIRECT --to-port {{ p.dest }}
+rm_rule nat OUTPUT -p udp -o lo --dport {{ p.src }} -j REDIRECT --to-port {{ p.dest }}
+{% endfor %}
+{% for port in firewall_flood_tcp_ports %}
+rm_rule filter INPUT -p tcp -m tcp --dport {{ port }} -m state --state NEW -m recent --update --seconds 10 --hitcount 20 --name DEFAULT --rsource -j DROP
+{% endfor %}
+{% for port in firewall_allowed_tcp_ports %}
+rm_rule filter INPUT -p tcp -m tcp --dport {{ port }} -j ACCEPT
+{% endfor %}
+{% for port in firewall_allowed_udp_ports %}
+rm_rule filter INPUT -p udp -m udp --dport {{ port }} -j ACCEPT
+{% endfor %}
+{% for addr in firewall_allowed_ip %}
+rm_rule filter INPUT -s {{ addr }} -j ACCEPT
+{% endfor %}
+rm_rule filter INPUT -p icmp -j ACCEPT
+rm_rule filter OUTPUT -p udp --dport 123 -j ACCEPT
+rm_rule filter INPUT -p udp --sport 123 -j ACCEPT
+rm_rule filter INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+rm_rule filter INPUT -i lo -j ACCEPT
+
+[ "$CHANGED" = 1 ] && echo "CHANGED"
+exit 0

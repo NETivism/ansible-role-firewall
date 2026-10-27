@@ -1,0 +1,114 @@
+#!/usr/sbin/nft -f
+# {{ ansible_managed }}
+#
+# Host firewall, loaded by firewall.service.
+# Only touches "table inet firewall", so tables owned by fail2ban
+# (inet f2b-table) and docker (ip nat / ip filter) are left alone.
+
+# Create-then-delete makes the reload atomic and idempotent.
+table inet firewall
+delete table inet firewall
+
+table inet firewall {
+  set allowed_tcp {
+    type inet_service
+    flags interval
+{% if firewall_allowed_tcp_ports | length %}
+    elements = { {{ firewall_allowed_tcp_ports | map('string') | map('replace', ':', '-') | join(', ') }} }
+{% endif %}
+  }
+
+  set allowed_udp {
+    type inet_service
+    flags interval
+{% if firewall_allowed_udp_ports | length %}
+    elements = { {{ firewall_allowed_udp_ports | map('string') | map('replace', ':', '-') | join(', ') }} }
+{% endif %}
+  }
+
+  set flood_tcp {
+    type inet_service
+    flags interval
+{% if firewall_flood_tcp_ports | length %}
+    elements = { {{ firewall_flood_tcp_ports | map('string') | map('replace', ':', '-') | join(', ') }} }
+{% endif %}
+  }
+
+  set allowed_ip4 {
+    type ipv4_addr
+    flags interval
+{% if _firewall_allowed_ip4 | length %}
+    elements = { {{ _firewall_allowed_ip4 | join(', ') }} }
+{% endif %}
+  }
+
+  set allowed_ip6 {
+    type ipv6_addr
+    flags interval
+{% if _firewall_allowed_ip6 | length %}
+    elements = { {{ _firewall_allowed_ip6 | join(', ') }} }
+{% endif %}
+  }
+
+  set flood_ip4 {
+    type ipv4_addr
+    flags dynamic, timeout
+    timeout {{ firewall_flood_seconds }}s
+  }
+
+  set flood_ip6 {
+    type ipv6_addr
+    flags dynamic, timeout
+    timeout {{ firewall_flood_seconds }}s
+  }
+
+  chain input {
+    type filter hook input priority filter; policy drop;
+
+    iifname "lo" accept
+    ip saddr @allowed_ip4 accept
+    ip6 saddr @allowed_ip6 accept
+
+    ct state established,related accept
+    ct state invalid drop
+
+    # ICMPv6 is required for IPv6 neighbor discovery.
+    meta l4proto { icmp, ipv6-icmp } accept
+
+    # Flood control: drop sources opening too many new connections.
+    tcp dport @flood_tcp ct state new update @flood_ip4 { ip saddr limit rate over {{ firewall_flood_rate }} burst {{ firewall_flood_hitcount }} packets } drop
+    tcp dport @flood_tcp ct state new update @flood_ip6 { ip6 saddr limit rate over {{ firewall_flood_rate }} burst {{ firewall_flood_hitcount }} packets } drop
+
+    tcp dport @allowed_tcp accept
+    udp dport @allowed_udp accept
+
+    # NTP replies.
+    udp sport 123 accept
+
+{% if firewall_log_dropped_packets %}
+    limit rate 15/minute log prefix "Dropped by firewall: " level debug
+{% endif %}
+  }
+{% if firewall_forwarded_tcp_ports | length or firewall_forwarded_udp_ports | length %}
+
+  chain prerouting {
+    type nat hook prerouting priority dstnat;
+{% for p in firewall_forwarded_tcp_ports %}
+    tcp dport {{ p.src }} redirect to :{{ p.dest }}
+{% endfor %}
+{% for p in firewall_forwarded_udp_ports %}
+    udp dport {{ p.src }} redirect to :{{ p.dest }}
+{% endfor %}
+  }
+
+  chain output_nat {
+    type nat hook output priority -100;
+{% for p in firewall_forwarded_tcp_ports %}
+    oifname "lo" tcp dport {{ p.src }} redirect to :{{ p.dest }}
+{% endfor %}
+{% for p in firewall_forwarded_udp_ports %}
+    oifname "lo" udp dport {{ p.src }} redirect to :{{ p.dest }}
+{% endfor %}
+  }
+{% endif %}
+}

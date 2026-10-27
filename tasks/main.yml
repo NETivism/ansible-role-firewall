@@ -1,23 +1,32 @@
 ---
-- name: Ensure iptables is installed (Debian).
-  apt: pkg=iptables state=present
-  when: ansible_os_family == 'Debian'
+- name: Set up iptables firewall
+  include_tasks:
+    file: iptables.yml
+    apply:
+      tags:
+        - firewall-reload
+  when: firewall_backend == 'iptables'
   tags:
     - firewall-reload
 
-- name: Copy firewall script into place.
-  template: src=firewall.bash.j2 dest=/usr/local/bin/firewall.sh owner=root group=root mode=0744
+- name: Set up nftables firewall
+  include_tasks:
+    file: nftables.yml
+    apply:
+      tags:
+        - firewall-reload
+  when: firewall_backend == 'nftables'
   tags:
     - firewall-reload
 
-- name: Copy firewall init script into place.
-  template: src=firewall.j2 dest=/etc/init.d/firewall owner=root group=root mode=0755
-  notify:
-    - restart firewall
+- name: Verify nftables firewall
+  include_tasks:
+    file: nftables_verify.yml
+    apply:
+      tags:
+        - firewall-reload
+        - firewall-verify
+  when: firewall_backend == 'nftables' and not ansible_check_mode
   tags:
     - firewall-reload
-
-- name: Enabled firewall on startup
-  service: name=firewall state=started enabled=yes
-  tags:
-    - firewall-reload
+    - firewall-verify

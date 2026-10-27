@@ -1,0 +1,75 @@
+---
+# Confirm the ruleset actually loaded into the kernel matches the variables of this run.
+- name: Check firewall service is active and enabled
+  command: systemctl is-active firewall
+  register: firewall_verify_active
+  changed_when: false
+  failed_when: firewall_verify_active.stdout != 'active'
+
+- name: Check firewall service is enabled on boot
+  command: systemctl is-enabled firewall
+  register: firewall_verify_enabled
+  changed_when: false
+  failed_when: firewall_verify_enabled.stdout != 'enabled'
+
+- name: Read loaded nftables firewall table
+  command: nft -j list table inet firewall
+  register: firewall_verify_nft
+  changed_when: false
+
+- name: Collect loaded and expected firewall rules
+  set_fact:
+    _firewall_loaded: >-
+      {%- set result = {'policy': ''} -%}
+      {%- for obj in (firewall_verify_nft.stdout | from_json).nftables -%}
+        {%- if 'chain' in obj and obj.chain.name == 'input' -%}
+          {%- set _ = result.update({'policy': obj.chain.policy | default('')}) -%}
+        {%- elif 'set' in obj -%}
+          {%- set elems = [] -%}
+          {%- for e in obj.set.elem | default([]) -%}
+            {%- if e is mapping and 'range' in e -%}
+              {%- set _ = elems.append(e.range | map('string') | join('-')) -%}
+            {%- elif e is mapping and 'prefix' in e -%}
+              {%- set _ = elems.append(e.prefix.addr ~ '/' ~ e.prefix.len) -%}
+            {%- else -%}
+              {%- set _ = elems.append(e | string) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {%- set _ = result.update({obj.set.name: elems | sort}) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ result }}
+    _firewall_expected:
+      policy: drop
+      allowed_tcp: "{{ firewall_allowed_tcp_ports | map('string') | map('replace', ':', '-') | sort }}"
+      allowed_udp: "{{ firewall_allowed_udp_ports | map('string') | map('replace', ':', '-') | sort }}"
+      flood_tcp: "{{ firewall_flood_tcp_ports | map('string') | map('replace', ':', '-') | sort }}"
+      allowed_ip4: "{{ _firewall_allowed_ip4 | map('regex_replace', '/32$', '') | sort }}"
+      allowed_ip6: "{{ _firewall_allowed_ip6 | map('lower') | map('regex_replace', '/128$', '') | sort }}"
+
+- name: Assert loaded nftables rules match configuration
+  assert:
+    that:
+      - _firewall_loaded[item] | default('MISSING') == _firewall_expected[item]
+    fail_msg: "{{ item }}: loaded {{ _firewall_loaded[item] | default('MISSING') }}, expected {{ _firewall_expected[item] }}"
+    success_msg: "{{ item }}: {{ _firewall_expected[item] }}"
+  loop: "{{ _firewall_expected.keys() | list }}"
+
+- name: Read legacy iptables INPUT chain
+  shell: command -v iptables >/dev/null 2>&1 && iptables -S INPUT || true
+  register: firewall_verify_iptables
+  changed_when: false
+
+- name: Assert old iptables DROP rule is gone
+  assert:
+    that:
+      - "'-A INPUT -j DROP' not in firewall_verify_iptables.stdout_lines"
+    fail_msg: "legacy iptables still drops all INPUT traffic: {{ firewall_verify_iptables.stdout_lines }}"
+    success_msg: "no legacy iptables DROP rule"
+
+# Established sessions survive any ruleset; force a new ssh connection to prove access.
+- name: Drop current ssh connection
+  meta: reset_connection
+
+- name: Check a new ssh connection still works
+  ping:

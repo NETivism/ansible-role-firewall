@@ -16,3 +16,13 @@ firewall_allowed_udp_ports: []
 firewall_forwarded_tcp_ports: []
 firewall_forwarded_udp_ports: []
 firewall_log_dropped_packets: true
+
+# "nftables" on Debian 13+ (same switch as the fail2ban role), "iptables" otherwise.
+firewall_backend: "{{ 'nftables' if (ansible_distribution == 'Debian' and ansible_distribution_major_version | int >= 13) else 'iptables' }}"
+firewall_nft_file: /etc/nftables.d/firewall.nft
+# nftables flood control: more than <hitcount> new connections, then over <rate>, per source.
+firewall_flood_hitcount: 20
+firewall_flood_rate: "2/second"
+firewall_flood_seconds: 10
+_firewall_allowed_ip4: "{{ firewall_allowed_ip | reject('search', ':') | list }}"
+_firewall_allowed_ip6: "{{ firewall_allowed_ip | select('search', ':') | list }}"
