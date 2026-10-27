@@ -46,6 +46,8 @@
       flood_tcp: "{{ firewall_flood_tcp_ports | map('string') | map('replace', ':', '-') | sort }}"
       allowed_ip4: "{{ _firewall_allowed_ip4 | map('regex_replace', '/32$', '') | sort }}"
       allowed_ip6: "{{ _firewall_allowed_ip6 | map('lower') | map('regex_replace', '/128$', '') | sort }}"
+      flood_exempt_ip4: "{{ _firewall_flood_exempt_ip4 | map('regex_replace', '/32$', '') | sort }}"
+      flood_exempt_ip6: "{{ _firewall_flood_exempt_ip6 | map('lower') | map('regex_replace', '/128$', '') | sort }}"
 
 - name: Assert loaded nftables rules match configuration
   assert:

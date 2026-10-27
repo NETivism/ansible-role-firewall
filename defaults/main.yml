@@ -20,9 +20,42 @@ firewall_log_dropped_packets: true
 # "nftables" on Debian 13+ (same switch as the fail2ban role), "iptables" otherwise.
 firewall_backend: "{{ 'nftables' if (ansible_distribution == 'Debian' and ansible_distribution_major_version | int >= 13) else 'iptables' }}"
 firewall_nft_file: /etc/nftables.d/firewall.nft
-# nftables flood control: more than <hitcount> new connections, then over <rate>, per source.
-firewall_flood_hitcount: 20
-firewall_flood_rate: "2/second"
-firewall_flood_seconds: 10
+# nftables flood control, per source IP, counting new TCP connections only
+# (requests reusing a keep-alive / HTTP/2 connection are not counted).
+# A browser opens at most ~6 connections per host per page, so the limits
+# leave room for offices sharing one public IP behind NAT, while keeping a
+# single source from tying up the PHP workers of a small (8GB) host.
+# Allow a burst of <hitcount> new connections, then <rate> sustained.
+firewall_flood_hitcount: 120
+firewall_flood_rate: "10/second"
+# Forget a source after this many idle seconds.
+firewall_flood_seconds: 30
+# Sources never rate limited: CDN / reverse proxies aggregate many visitors into one IP.
+# Defaults to the Cloudflare ranges from roles/nginx/files/etc-nginx-include/realip.conf.
+firewall_flood_exempt_ip:
+  - "103.21.244.0/22"
+  - "103.22.200.0/22"
+  - "103.31.4.0/22"
+  - "104.16.0.0/13"
+  - "104.24.0.0/14"
+  - "108.162.192.0/18"
+  - "131.0.72.0/22"
+  - "141.101.64.0/18"
+  - "162.158.0.0/15"
+  - "172.64.0.0/13"
+  - "173.245.48.0/20"
+  - "188.114.96.0/20"
+  - "190.93.240.0/20"
+  - "197.234.240.0/22"
+  - "198.41.128.0/17"
+  - "2400:cb00::/32"
+  - "2606:4700::/32"
+  - "2803:f800::/32"
+  - "2405:b500::/32"
+  - "2405:8100::/32"
+  - "2a06:98c0::/29"
+  - "2c0f:f248::/32"
 _firewall_allowed_ip4: "{{ firewall_allowed_ip | reject('search', ':') | list }}"
 _firewall_allowed_ip6: "{{ firewall_allowed_ip | select('search', ':') | list }}"
+_firewall_flood_exempt_ip4: "{{ firewall_flood_exempt_ip | reject('search', ':') | list }}"
+_firewall_flood_exempt_ip6: "{{ firewall_flood_exempt_ip | select('search', ':') | list }}"
