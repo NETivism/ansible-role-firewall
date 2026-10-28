@@ -15,6 +15,49 @@
 - name: Create nftables include directory
   file: path={{ firewall_nft_file | dirname }} state=directory owner=root group=root mode=0755
 
+# Only always allowed sources could still reach ssh, an empty list means nobody.
+- name: Assert ssh geo restriction keeps always allowed sources
+  assert:
+    that:
+      - firewall_ssh_always_ip | length
+      - firewall_ssh_geo_mode in ['log', 'drop']
+    fail_msg: "firewall_ssh_geo_countries is set, firewall_ssh_always_ip must not be empty"
+  when: firewall_ssh_geo_countries | length
+
+- name: Read checksum of geoip mmdb
+  stat:
+    path: "{{ firewall_ssh_geo_mmdb }}"
+    checksum_algorithm: sha256
+  register: firewall_ssh_geo_mmdb_stat
+  delegate_to: localhost
+  become: no
+  run_once: yes
+  when: firewall_ssh_geo_countries | length
+
+- name: Warn when geoip files are older than the mmdb
+  debug:
+    msg: "WARNING: geoip/{{ item }}.nft was not generated from the current mmdb, run: python3 tools/geoip-nft-gen.py {{ item }}"
+  loop: "{{ firewall_ssh_geo_countries }}"
+  run_once: yes
+  when:
+    - firewall_ssh_geo_countries | length
+    - firewall_ssh_geo_mmdb_stat.stat.checksum | default('') not in lookup('file', firewall_ssh_geo_src ~ '/' ~ item ~ '.nft')
+
+- name: Create nftables geoip directory
+  file: path={{ firewall_ssh_geo_dir }} state=directory owner=root group=root mode=0755
+  when: firewall_ssh_geo_countries | length
+
+# Must be in place before the ruleset below is validated, it includes them.
+- name: Copy ssh geoip sets into place
+  copy:
+    src: "{{ firewall_ssh_geo_src }}/{{ item }}.nft"
+    dest: "{{ firewall_ssh_geo_dir }}/{{ item }}.nft"
+    owner: root
+    group: root
+    mode: 0644
+  loop: "{{ firewall_ssh_geo_countries }}"
+  register: firewall_ssh_geo_copy
+
 - name: Copy nftables ruleset into place
   template:
     src: firewall.nft.j2
@@ -49,7 +92,7 @@
     name: firewall
     daemon_reload: yes
     enabled: yes
-    state: "{{ 'restarted' if (firewall_nft_template.changed or firewall_unit_template.changed or firewall_legacy_init.stat.exists) else 'started' }}"
+    state: "{{ 'restarted' if (firewall_nft_template.changed or firewall_ssh_geo_copy.changed or firewall_unit_template.changed or firewall_legacy_init.stat.exists) else 'started' }}"
 
 - name: Render legacy iptables cleanup script
   template: src=firewall-iptables-cleanup.sh.j2 dest=/usr/local/sbin/firewall-iptables-cleanup.sh owner=root group=root mode=0700

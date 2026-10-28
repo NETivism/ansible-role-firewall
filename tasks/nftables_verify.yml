@@ -57,6 +57,24 @@
     success_msg: "{{ item }}: {{ _firewall_expected[item] }}"
   loop: "{{ _firewall_expected.keys() | list }}"
 
+- name: Assert loaded ssh always allowed sources match configuration
+  assert:
+    that:
+      - _firewall_loaded.ssh_always_ip4 | default('MISSING') == _firewall_ssh_always_ip4 | map('regex_replace', '/32$', '') | sort
+      - _firewall_loaded.ssh_always_ip6 | default('MISSING') == _firewall_ssh_always_ip6 | map('lower') | map('regex_replace', '/128$', '') | sort
+    fail_msg: "ssh_always: loaded {{ _firewall_loaded.ssh_always_ip4 | default('MISSING') }} {{ _firewall_loaded.ssh_always_ip6 | default('MISSING') }}, expected {{ firewall_ssh_always_ip }}"
+    success_msg: "ssh_always: {{ firewall_ssh_always_ip }}"
+  when: firewall_ssh_geo_countries | length
+
+# Loaded geo sets are auto-merged ranges, so compare the size only.
+- name: Assert loaded ssh geo set is filled
+  assert:
+    that:
+      - _firewall_loaded.ssh_geo_ip4 | default([]) | length > 1000
+    fail_msg: "ssh_geo_ip4: only {{ _firewall_loaded.ssh_geo_ip4 | default([]) | length }} ranges loaded"
+    success_msg: "ssh_geo_ip4: {{ _firewall_loaded.ssh_geo_ip4 | length }} ranges, ssh_geo_ip6: {{ _firewall_loaded.ssh_geo_ip6 | default([]) | length }} ranges ({{ firewall_ssh_geo_mode }})"
+  when: firewall_ssh_geo_countries | length
+
 - name: Read legacy iptables INPUT chain
   shell: command -v iptables >/dev/null 2>&1 && iptables -S INPUT || true
   register: firewall_verify_iptables

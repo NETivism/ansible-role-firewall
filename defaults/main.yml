@@ -55,7 +55,21 @@ firewall_flood_exempt_ip:
   - "2405:8100::/32"
   - "2a06:98c0::/29"
   - "2c0f:f248::/32"
+# SSH geo restriction (nftables only), empty disables it.
+# Each country needs <firewall_ssh_geo_src>/<CC>.nft, made by tools/geoip-nft-gen.py.
+firewall_ssh_geo_countries: []
+firewall_ssh_geo_src: "{{ playbook_dir }}/files/geoip"
+# "log" only logs ssh from other countries, "drop" blocks it.
+firewall_ssh_geo_mode: drop
+firewall_ssh_port: 22
+# Sources always allowed to reach ssh regardless of country.
+firewall_ssh_always_ip: []
+# Source of the geoip files, checked to warn when they are older than the mmdb.
+firewall_ssh_geo_mmdb: "{{ playbook_dir }}/roles/nginx/files/etc-nginx-include/GeoLite2-Country.mmdb"
+firewall_ssh_geo_dir: "{{ firewall_nft_file | dirname }}/geoip"
 _firewall_allowed_ip4: "{{ firewall_allowed_ip | reject('search', ':') | list }}"
 _firewall_allowed_ip6: "{{ firewall_allowed_ip | select('search', ':') | list }}"
 _firewall_flood_exempt_ip4: "{{ firewall_flood_exempt_ip | reject('search', ':') | list }}"
 _firewall_flood_exempt_ip6: "{{ firewall_flood_exempt_ip | select('search', ':') | list }}"
+_firewall_ssh_always_ip4: "{{ firewall_ssh_always_ip | reject('search', ':') | list }}"
+_firewall_ssh_always_ip6: "{{ firewall_ssh_always_ip | select('search', ':') | list }}"

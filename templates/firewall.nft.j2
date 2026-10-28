@@ -66,6 +66,37 @@ table inet firewall {
 {% endif %}
   }
 
+{% if firewall_ssh_geo_countries | length %}
+  set ssh_always_ip4 {
+    type ipv4_addr
+    flags interval
+{% if _firewall_ssh_always_ip4 | length %}
+    elements = { {{ _firewall_ssh_always_ip4 | join(', ') }} }
+{% endif %}
+  }
+
+  set ssh_always_ip6 {
+    type ipv6_addr
+    flags interval
+{% if _firewall_ssh_always_ip6 | length %}
+    elements = { {{ _firewall_ssh_always_ip6 | join(', ') }} }
+{% endif %}
+  }
+
+  # Filled by the geoip files included after this table.
+  set ssh_geo_ip4 {
+    type ipv4_addr
+    flags interval
+    auto-merge
+  }
+
+  set ssh_geo_ip6 {
+    type ipv6_addr
+    flags interval
+    auto-merge
+  }
+
+{% endif %}
   set flood_ip4 {
     type ipv4_addr
     flags dynamic, timeout
@@ -91,6 +122,19 @@ table inet firewall {
     # ICMPv6 is required for IPv6 neighbor discovery.
     meta l4proto { icmp, ipv6-icmp } accept
 
+{% if firewall_ssh_geo_countries | length %}
+    # SSH only from {{ firewall_ssh_geo_countries | join(', ') }}, except always allowed sources.
+    tcp dport {{ firewall_ssh_port }} ip saddr @ssh_always_ip4 accept
+    tcp dport {{ firewall_ssh_port }} ip6 saddr @ssh_always_ip6 accept
+{% if firewall_ssh_geo_mode == 'drop' %}
+    tcp dport {{ firewall_ssh_port }} ip saddr != @ssh_geo_ip4 counter drop
+    tcp dport {{ firewall_ssh_port }} ip6 saddr != @ssh_geo_ip6 counter drop
+{% else %}
+    tcp dport {{ firewall_ssh_port }} ip saddr != @ssh_geo_ip4 counter limit rate 15/minute log prefix "SSH geo: " level info
+    tcp dport {{ firewall_ssh_port }} ip6 saddr != @ssh_geo_ip6 counter limit rate 15/minute log prefix "SSH geo: " level info
+{% endif %}
+
+{% endif %}
     # Flood control: drop sources opening too many new connections.
     tcp dport @flood_tcp ct state new ip saddr != @flood_exempt_ip4 update @flood_ip4 { ip saddr limit rate over {{ firewall_flood_rate }} burst {{ firewall_flood_hitcount }} packets } drop
     tcp dport @flood_tcp ct state new ip6 saddr != @flood_exempt_ip6 update @flood_ip6 { ip6 saddr limit rate over {{ firewall_flood_rate }} burst {{ firewall_flood_hitcount }} packets } drop
@@ -128,3 +172,6 @@ table inet firewall {
   }
 {% endif %}
 }
+{% for country in firewall_ssh_geo_countries %}
+include "{{ firewall_ssh_geo_dir }}/{{ country }}.nft"
+{% endfor %}
